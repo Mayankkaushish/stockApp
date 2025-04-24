@@ -11,21 +11,17 @@ const StockCard: React.FC<{ symbol: string }> = ({ symbol }) => {
   return (
     <div className="border border-gray-300 p-4 rounded-xl shadow-md w-80 bg-white">
       <h2 className="text-lg font-bold">{data.symbol}</h2>
-      <p className="text-xl font-semibold text-blue-600">${data.latestPrice}</p>
-      <p className="text-sm text-gray-500">20-day SMA: {data.sma20}</p>
-      <p className="text-sm text-gray-500">20-day EMA: {data.ema20}</p>
-      <p
-        className={`text-sm ${
-          data.rsi14.status === "Overbought"
-            ? "text-red-500"
-            : data.rsi14.status === "Oversold"
-            ? "text-green-500"
-            : "text-gray-500"
-        }`}
-      >
-        RSI-14: {data.rsi14.value} ({data.rsi14.status})
+      <p className="text-xl font-semibold text-blue-600">${data.latestPrice.toFixed(2)}</p>
+      <p className="text-sm text-gray-500">Action: {data.analysis.action} ({data.analysis.confidence}%)</p>
+
+      <p className="text-sm text-gray-500">MACD: {data.analysis.macd.MACD.toFixed(2)}</p>
+      <p className="text-sm text-gray-500">MACD Signal: {data.analysis.macd.signal.toFixed(2)}</p>
+      <p className="text-sm text-gray-500">MACD Histogram: {data.analysis.macd.histogram.toFixed(2)}</p>
+
+      {/* ✅ Add Candlestick Pattern Display */}
+      <p className={`text-sm font-bold ${data.analysis.candlestickPattern !== "None" ? "text-green-500" : "text-gray-500"}`}>
+        Candlestick Pattern: {data.analysis.candlestickPattern}
       </p>
-      <p className="text-sm text-gray-500">MACD: {data.macd.MACD}</p>
     </div>
   );
 };

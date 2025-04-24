@@ -1,69 +1,80 @@
-import yahooFinance from "yahoo-finance2";
-import { SMA, EMA, RSI, MACD } from "technicalindicators";
+import axios from "axios";
+import { analyzeStock, StockData } from "../ai/aiAgent";
+import { SentimentData } from "../ai/sentiment/newsSentimentHelpers";
+
 export const fetchStockData = async (symbol: string) => {
+  try {
+    // ✅ Step 1: Fetch historical stock data
+    const historyResponse = await axios.get(`http://localhost:5000/api/stock/${symbol}?history=true`);
+    const historyData = historyResponse.data;
+    if (!historyData || historyData.length === 0) return null;
+
+    historyData.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const openPrices = historyData.map((d: any) => parseFloat(d.open.toFixed(2)));
+    const highPrices = historyData.map((d: any) => parseFloat(d.high.toFixed(2)));
+    const lowPrices = historyData.map((d: any) => parseFloat(d.low.toFixed(2)));
+    const closePrices = historyData.map((d: any) => parseFloat(d.close.toFixed(2)));
+
+    // ✅ Step 2: Fetch latest real-time stock data
+    const latestResponse = await axios.get(`http://localhost:5000/api/stock/${symbol}`);
+    const latestData = latestResponse.data;
+    if (!latestData || !latestData.latestPrice) return null;
+
+    const lastIndex = closePrices.length - 1;
+    openPrices[lastIndex] = latestData.open ?? openPrices[lastIndex];
+    highPrices[lastIndex] = latestData.high ?? Math.max(highPrices[lastIndex], latestData.latestPrice);
+    lowPrices[lastIndex] = latestData.low ?? Math.min(lowPrices[lastIndex], latestData.latestPrice);
+    closePrices[lastIndex] = latestData.latestPrice;
+
+    const recentOpenPrices = openPrices.slice(-6);
+    const recentHighPrices = highPrices.slice(-6);
+    const recentLowPrices = lowPrices.slice(-6);
+    const recentClosePrices = closePrices.slice(-6);
+
+    console.log(`✅ Extracted Candlestick Data for ${symbol}:`, {
+      openPrices: recentOpenPrices,
+      highPrices: recentHighPrices,
+      lowPrices: recentLowPrices,
+      closePrices: recentClosePrices,
+    });
+
+    // ✅ Step 3: Fetch fundamental data
+    const fundamentalsResponse = await axios.get(`http://localhost:5000/api/fundamentals/${symbol}`);
+    const fundamentals = fundamentalsResponse.data;
+
+    // ✅ Step 4: Fetch sentiment from backend
+    let sentiment: SentimentData = { label: "Neutral", confidence: 0 };
     try {
-      const today = new Date();
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(today.getMonth() - 3);
-  
-      const chartData = await yahooFinance.chart(symbol, {
-        interval: "1d",
-        period1: threeMonthsAgo.toISOString().split("T")[0],
-        period2: today.toISOString().split("T")[0],
-      });
-  
-      if (!chartData || !chartData.quotes || chartData.quotes.length === 0) {
-        console.log("No historical data available.");
-        return null;
-      }
-  
-      const closingPrices: number[] = chartData.quotes
-        .map((quote) => quote.close)
-        .filter((price): price is number => price !== null);
-  
-      const sma20 = SMA.calculate({ period: 20, values: closingPrices });
-      const ema20 = EMA.calculate({ period: 20, values: closingPrices });
-      const rsi14Values = RSI.calculate({ period: 14, values: closingPrices });
-  
-      const latestRSI14 = rsi14Values[rsi14Values.length - 1] || "N/A";
-      const rsiStatus =
-        typeof latestRSI14 === "number"
-          ? latestRSI14 > 70
-            ? "Overbought"
-            : latestRSI14 < 30
-            ? "Oversold"
-            : "Neutral"
-          : "Data Unavailable";
-  
-      const macdResult = MACD.calculate({
-        values: closingPrices,
-        fastPeriod: 12,
-        slowPeriod: 26,
-        signalPeriod: 9,
-        SimpleMAOscillator: false,
-        SimpleMASignal: false,
-      });
-  
-      // Ensure MACD values are never `undefined`
-      const latestMACD = macdResult[macdResult.length - 1] || {};
-      const macd = {
-        MACD: latestMACD.MACD ?? "N/A",
-        signal: latestMACD.signal ?? "N/A",
-        histogram: latestMACD.histogram ?? "N/A",
-      };
-  
-      return {
-        symbol,
-        latestPrice: closingPrices[closingPrices.length - 1] || "N/A",
-        sma20: sma20[sma20.length - 1] || "N/A",
-        ema20: ema20[ema20.length - 1] || "N/A",
-        rsi14: latestRSI14,
-        rsiStatus,
-        macd,
-      };
-    } catch (error) {
-      console.error("Error fetching stock data:", error);
-      return null;
+      const sentimentResponse = await axios.post("/api/sentiment", { symbol });
+      sentiment = sentimentResponse.data;
+    } catch (err: any) {
+      console.warn("⚠️ Sentiment fetch failed, using default neutral sentiment.", err?.message || err);
     }
-  };
-  
+
+
+    // ✅ Step 5: Analyze
+    const stockData: StockData = {
+      symbol,
+      openPrices,
+      highPrices,
+      lowPrices,
+      closePrices,
+      fundamentals,
+      sentiment,
+    };
+
+    const analysis = analyzeStock(stockData);
+
+    return {
+      symbol,
+      latestPrice: latestData.latestPrice,
+      volume: latestData.volume || 0,
+      timestamp: latestData.timestamp || Date.now(),
+      analysis,
+    };
+  } catch (error) {
+    console.error(`❌ Error fetching stock data for ${symbol}:`, error);
+    return null;
+  }
+};
