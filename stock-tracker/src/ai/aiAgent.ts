@@ -2,7 +2,7 @@
 import { rsi, macd, sma, ema, bollingerbands, adx } from "technicalindicators";
 import { getMACDHistogramTrend } from "./indicators/macdHelpers";
 import { detectCandlestickPattern } from "./patterns/candlestickHelpers";
-import { isBollingerBandSqueeze } from "./indicators/bollingerHelpers";
+import { detectBollingerBandSqueeze } from "./indicators/bollingerHelpers";
 import { computeScore } from "./scoring/technicalScoring";
 import { analyzeEarningsStrength, EarningsData } from "./fundamentals/fundamentalHelpers";
 import { RevenueData, analyzeRevenueGrowth  } from "./fundamentals/revenueHelpers";
@@ -25,6 +25,7 @@ export interface StockData {
     operatingMargin?:OperatingMarginData;
 }
   sentiment?: SentimentData;
+  hedgeFundScore?: number;
 };
 
 
@@ -85,7 +86,11 @@ export const analyzeStock = (data: StockData): AIAnalysis => {
     histogram: parseFloat((latestMACDData.histogram ?? 0).toFixed(2)),
   };
   const latestBoll = boll.at(-1) ?? { upper: 0, middle: 0, lower: 0 };
-  const isSqueeze = isBollingerBandSqueeze(boll.slice(-20));
+  // const isSqueeze = isBollingerBandSqueeze(boll.slice(-20));
+  const squeezeResult = detectBollingerBandSqueeze(boll.slice(-20));
+  const isSqueeze = squeezeResult.isSqueeze;
+  const squeezeWidth = squeezeResult.squeezeWidth;
+
   const histValues = macdValues.map((m) => m.histogram ?? 0);
   const macdHistTrend = getMACDHistogramTrend(histValues);
 
@@ -103,7 +108,9 @@ export const analyzeStock = (data: StockData): AIAnalysis => {
     adx: latestADX,
     candlestickPattern,
     isSqueeze,
+    squeezeWidth,  // ✅
   });
+  
 
   const fundamentalScore = fundamentals?.earnings
     ? analyzeEarningsStrength(fundamentals.earnings)
@@ -122,18 +129,20 @@ export const analyzeStock = (data: StockData): AIAnalysis => {
   ? analyzeOperatingMarginStrength(fundamentals.operatingMargin)
   : 0;
 
-
-  // === Sentiment Score (optional)
+  // === Sentiment Score
 let sentimentScore = 0;
 if (data.sentiment) {
   sentimentScore = computeSentimentScore(data.sentiment);
   console.log("📰 News Sentiment Score:", sentimentScore);
 }
 
+// ✅ Include hedge fund score (max 10 points)
+const hfScore = data.hedgeFundScore ?? 0;
+console.log("🏦 Hedge Fund Score:", hfScore);
 
     
     // Final score
-  const totalScore = technicalScore + fundamentalScore + revenueScore + marginScore + operatingMarginScore + sentimentScore;
+  const totalScore = technicalScore + fundamentalScore + revenueScore + marginScore + operatingMarginScore + sentimentScore + hfScore;
 
   // === Logging
   // console.log(`📈 Close: ${latestClose}`);
@@ -149,25 +158,26 @@ if (data.sentiment) {
   console.log("📈 Revenue Score:", revenueScore);
   console.log("📈 Margin Score:", marginScore);
   console.log("📈 Operating Margin Score:", operatingMarginScore);
-  console.log("🧠 Total Score (Tech + Earnings + Revenue + Margin + Operating + sentiment):", totalScore);
+  console.log("Hedge Fund Score", hfScore);
+  console.log("🧠 Total Score (Tech + Earnings + Revenue + Margin + Operating + sentiment + hedgefund):", totalScore);
 
   // === Final Signal
   let action: AIAnalysis["action"] = "Hold";
-  let confidence = 50;
+let confidence = 55; // default
 
-  if (totalScore >= 80) {
-    action = "Strong Buy";
-    confidence = 95;
-  } else if (totalScore >= 60) {
-    action = "Weak Buy";
-    confidence = 70 + Math.min((totalScore - 60) * 0.5, 10);
-  } else if (totalScore <= -80) {
-    action = "Strong Sell";
-    confidence = 95;
-  } else if (totalScore <= -60) {
-    action = "Weak Sell";
-    confidence = 70 + Math.min((-totalScore - 60) * 0.5, 10);
-  }
+if (totalScore >= 70) {
+  action = "Strong Buy";
+  confidence = 90 + Math.min((totalScore - 70) * 0.2, 5); // Max 95%
+} else if (totalScore >= 40) {
+  action = "Weak Buy";
+  confidence = 70 + Math.min((totalScore - 40) * 0.5, 15); // Max 85%
+} else if (totalScore <= -70) {
+  action = "Strong Sell";
+  confidence = 90 + Math.min((-totalScore - 70) * 0.2, 5); // Max 95%
+} else if (totalScore <= -40) {
+  action = "Weak Sell";
+  confidence = 70 + Math.min((-totalScore - 40) * 0.5, 15); // Max 85%
+}
 
   return {
     symbol,

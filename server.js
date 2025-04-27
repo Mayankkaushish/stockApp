@@ -211,28 +211,25 @@ app.post("/api/sentiment", async (req, res) => {
 
   app.get('/api/hedge-fund-sentiment', async (req, res) => {
     try {
-      const url = 'https://data.financialresearch.gov/hf/v1/series/full/?mnemonic=HFRXGL'; // Example mnemonic
+      const mnemonic = "FPF-ALLQHF_GAVN10_LEVERAGERATIO_AVERAGE";
+      const url = `https://data.financialresearch.gov/hf/v1/series/full/?mnemonic=${mnemonic}`;
       const response = await axios.get(url);
-      const data = response.data?.observations || [];
   
-      // Get the most recent value
-      const latest = data.at(-1);
-      if (!latest) {
-        return res.json({ score: 0, message: "No recent hedge fund data found" });
+      const timeseries = response.data?.[mnemonic]?.timeseries?.aggregation;
+      if (!timeseries || timeseries.length === 0) {
+        return res.json({ score: 0, message: "No data found" });
       }
   
-      const score = parseFloat(latest.value);
-      console.log("📈 Latest Hedge Fund Sentiment Score:", score);
+      const latest = timeseries[timeseries.length - 1];
+      const score = latest?.[1] ?? 0;
   
-      res.json({
-        score,
-        date: latest.date,
-      });
+      console.log("📊 Hedge Fund Leverage Score:", score);
+      res.json({ score, date: latest[0] });
     } catch (error) {
       console.error("❌ Error fetching hedge fund sentiment:", error.message);
       res.status(500).json({ error: "Failed to fetch hedge fund sentiment" });
     }
-  });
+  });  
   
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);

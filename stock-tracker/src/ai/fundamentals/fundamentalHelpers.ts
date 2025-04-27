@@ -6,25 +6,33 @@ export interface EarningsData {
     surprisePercentage: number[]; // Surprise % for each quarter
   }
   
-  export const analyzeEarningsStrength = (data: EarningsData): number => {
-    if (!data.earningsPerShare.length || !data.surprisePercentage.length) {
-      return 0;
-    }
-  
-    const recentEPS = data.earningsPerShare.slice(-4); // Last 4 quarters
-    const recentSurprise = data.surprisePercentage.slice(-4);
-  
-    let score = 0;
-  
-    // Check for positive EPS trend
-    const epsGrowth = recentEPS.every((eps, i, arr) => i === 0 || eps >= arr[i - 1]);
-    if (epsGrowth) score += 15;
-  
-    // Average surprise positive?
-    const avgSurprise = recentSurprise.reduce((a, b) => a + b, 0) / recentSurprise.length;
-    if (avgSurprise > 5) score += 10;
-    else if (avgSurprise > 0) score += 5;
-  
-    return score;
-  };
+  // src/ai/scoring/earningsHelpers.ts
+
+export interface EarningsData {
+  earningsPerShare: number[];
+  surprisePercentage: number[];
+}
+
+export const analyzeEarningsStrength = (earnings: EarningsData): number => {
+  const surprises = earnings.surprisePercentage.slice(-4); // Last 4 quarters
+  const avgSurprise = surprises.reduce((sum, val) => sum + val, 0) / surprises.length;
+
+  let score = 0;
+
+  if (avgSurprise > 10) {
+    score = 15;
+  } else if (avgSurprise > 0) {
+    score = 7;
+  } else if (avgSurprise > -5) {
+    score = -5;
+  } else {
+    score = -15;
+  }
+
+  console.log("💸 Earnings Surprise Avg %:", avgSurprise.toFixed(2));
+  console.log("📈 Earnings Score:", score);
+
+  return score;
+};
+
   

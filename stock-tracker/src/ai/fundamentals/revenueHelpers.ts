@@ -1,34 +1,39 @@
-// src/ai/fundamentals/fundamentalHelpers.ts
+// src/ai/scoring/revenueHelpers.ts
 
 export interface RevenueData {
-    quarterlyRevenue: number[]; // Most recent quarters first (latest to oldest)
-  }
-  
-  export const analyzeRevenueGrowth = (data: RevenueData): number => {
-    const revenues = data.quarterlyRevenue;
-    console.log("📊 Reversed Revenue for Analysis:", revenues);
+  quarterlyRevenue: number[];
+}
 
-  
-    if (revenues.length < 2) return 0;
-  
-    let score = 0;
-    let consistentGrowth = true;
-  
-    for (let i = 1; i < revenues.length; i++) {
-      const change = (revenues[i - 1] - revenues[i]) / revenues[i];
-  
-      if (change > 0.05) consistentGrowth = false;
-  
-      if (change > 0.15) score -= 10;
-      else if (change > 0.05) score -= 5;
-      else if (change < -0.05) score += 10; // decline
-      else score += 5; // small growth
+export const analyzeRevenueGrowth = (revenue: RevenueData): number => {
+  const revenues = revenue.quarterlyRevenue.slice(-4); // Last 4 quarters
+  const growthRates = [];
+
+  for (let i = 1; i < revenues.length; i++) {
+    if (revenues[i - 1] > 0) {
+      const growth = ((revenues[i] - revenues[i - 1]) / revenues[i - 1]) * 100;
+      growthRates.push(growth);
     }
-  
-    if (consistentGrowth) {
-      score += 10; // bonus for consistent growth with low fluctuation
-    }
-  
-    return Math.max(-20, Math.min(score, 25)); // cap score between -20 and 25
-  };
-  
+  }
+
+  const avgGrowth = growthRates.length > 0
+    ? growthRates.reduce((sum, g) => sum + g, 0) / growthRates.length
+    : 0;
+
+  let score = 0;
+
+  if (avgGrowth > 15) {
+    score = 15;
+  } else if (avgGrowth > 5) {
+    score = 7;
+  } else if (avgGrowth > 0) {
+    score = 3;
+  } else {
+    score = -10;
+  }
+
+  console.log("📈 Revenue Growth Rates:", growthRates.map(g => g.toFixed(2)));
+  console.log("📈 Avg Revenue Growth %:", avgGrowth.toFixed(2));
+  console.log("📈 Revenue Growth Score:", score);
+
+  return score;
+};

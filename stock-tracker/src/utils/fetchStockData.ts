@@ -1,6 +1,7 @@
 import axios from "axios";
 import { analyzeStock, StockData } from "../ai/aiAgent";
 import { SentimentData } from "../ai/sentiment/newsSentimentHelpers";
+import { computeHedgeFundScore } from "../ai/fundamentals/hedgeFundHelpers";
 
 export const fetchStockData = async (symbol: string) => {
   try {
@@ -52,6 +53,18 @@ export const fetchStockData = async (symbol: string) => {
       console.warn("⚠️ Sentiment fetch failed, using default neutral sentiment.", err?.message || err);
     }
 
+    // ✅ Step 5: Fetch hedge fund activity
+    let hedgeFundScore = 0;
+    try {
+    const hfResponse = await axios.get("http://localhost:5000/api/hedge-fund-sentiment");
+    const { score, date } = hfResponse.data;
+    hedgeFundScore = computeHedgeFundScore(score, date);
+    console.log("🏦 Hedge Fund Score (After Decay):", hedgeFundScore);
+  } catch (err: any) {
+    console.warn("⚠️ Hedge Fund fetch failed, using default score 0.", err?.message || err);
+  }
+
+
 
     // ✅ Step 5: Analyze
     const stockData: StockData = {
@@ -62,6 +75,7 @@ export const fetchStockData = async (symbol: string) => {
       closePrices,
       fundamentals,
       sentiment,
+      hedgeFundScore,
     };
 
     const analysis = analyzeStock(stockData);
@@ -74,7 +88,7 @@ export const fetchStockData = async (symbol: string) => {
       analysis,
     };
   } catch (error) {
-    console.error(`❌ Error fetching stock data for ${symbol}:`, error);
+    console.error(`Error fetching stock data for ${symbol}:`, error);
     return null;
   }
 };
